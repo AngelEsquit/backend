@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 
-	// Import your models package (adjust path 'myapp' if needed)
 	"myapp/models"
 
 	"github.com/mattn/go-sqlite3" // Still needed for UNIQUE constraint check

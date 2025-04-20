@@ -1,9 +1,14 @@
 package models
 
 // --- Request DTOs ---
+type User struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 type UserResponse struct {
-	ID       int64  `json:"id"`       // User ID
-	Username string `json:"username"` // Username
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
 }
 
 // LoginRequest defines the expected structure for the login request body.

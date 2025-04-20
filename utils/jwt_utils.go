@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 var jwtSecretKey = []byte("mi_clave_secreta_muy_segura_cambiar_esto") // ¡CAMBIAR ESTO!
 
 // generateJWT crea un nuevo token JWT para un usuario
-func generateJWT(userID int) (string, time.Time, error) {
+func GenerateJWT(userID int) (string, time.Time, error) {
 	expirationTime := time.Now().Add(24 * time.Hour) // Token válido por 24 horas
 	claims := &jwt.RegisteredClaims{
 		Subject:   fmt.Sprintf("%d", userID), // Guardamos el UserID como string en "Subject"
@@ -36,15 +36,15 @@ func generateJWT(userID int) (string, time.Time, error) {
 }
 
 // hashToken crea un hash SHA256 del token para almacenamiento seguro
-func hashToken(token string) string {
+func HashToken(token string) string {
 	hasher := sha256.New()
 	hasher.Write([]byte(token))
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 // storeToken guarda el hash del token en la base de datos
-func storeToken(db *sql.DB, userID int, token string, expiresAt time.Time) error {
-	tokenHash := hashToken(token)
+func StoreToken(db *sql.DB, userID int, token string, expiresAt time.Time) error {
+	tokenHash := HashToken(token)
 	stmt, err := db.Prepare("INSERT INTO active_tokens(user_id, token_hash, expires_at) VALUES(?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("error preparando statement para guardar token: %w", err)
@@ -58,8 +58,8 @@ func storeToken(db *sql.DB, userID int, token string, expiresAt time.Time) error
 }
 
 // invalidateToken marca un token como inactivo (elimina de la tabla)
-func invalidateToken(db *sql.DB, token string) error {
-	tokenHash := hashToken(token)
+func InvalidateToken(db *sql.DB, token string) error {
+	tokenHash := HashToken(token)
 	stmt, err := db.Prepare("DELETE FROM active_tokens WHERE token_hash = ?")
 	if err != nil {
 		return fmt.Errorf("error preparando statement para invalidar token: %w", err)
@@ -109,7 +109,7 @@ func validateTokenAndGetUserID(db *sql.DB, tokenString string) (int, error) {
 	}
 
 	// Verificar si el token (su hash) está activo en la base de datos
-	tokenHash := hashToken(tokenString)
+	tokenHash := HashToken(tokenString)
 	var dbUserID int
 	var expiresAt time.Time
 	err = db.QueryRow("SELECT user_id, expires_at FROM active_tokens WHERE token_hash = ?", tokenHash).Scan(&dbUserID, &expiresAt)
@@ -132,31 +132,19 @@ func validateTokenAndGetUserID(db *sql.DB, tokenString string) (int, error) {
 	}
 
 	// El token es válido y activo, obtener UserID del claim "Subject"
-	userID, err := jwt.ParseSubject(tokenString, jwtSecretKey) // jwt.ParseSubject espera string
-	if err != nil {
-		// Fallback: intentar obtenerlo de los claims parseados si ParseSubject falla
-		if claims.Subject != "" {
-			var parsedUserID int
-			fmt.Sscan(claims.Subject, &parsedUserID) // Convertir string a int
-			if parsedUserID != 0 && parsedUserID == dbUserID {
-				return parsedUserID, nil
-			}
-		}
-		return 0, fmt.Errorf("error obteniendo UserID del token: %w", err)
+	var userID int
+	if claims.Subject == "" {
+		return 0, errors.New("el token no tiene un Subject válido")
 	}
-
-	// Convertir userID string a int
-	var finalUserID int
-	fmt.Sscan(userID, &finalUserID)
-	if finalUserID == 0 || finalUserID != dbUserID {
+	fmt.Sscan(claims.Subject, &userID)
+	if userID == 0 || userID != dbUserID {
 		return 0, errors.New("discrepancia de UserID entre token y DB")
 	}
-
-	return finalUserID, nil
+	return userID, nil
 }
 
 // Middleware de autenticación JWT
-func jwtAuthMiddleware(db *sql.DB) func(http.Handler) http.Handler {
+func JwtAuthMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -188,7 +176,7 @@ func jwtAuthMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 
 // cleanupExpiredToken (helper para limpiar tokens expirados)
 func cleanupExpiredToken(db *sql.DB, tokenString string) error {
-	tokenHash := hashToken(tokenString)
+	tokenHash := HashToken(tokenString)
 	_, err := db.Exec("DELETE FROM active_tokens WHERE token_hash = ?", tokenHash)
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("error eliminando token expirado hash %s: %w", tokenHash[:10], err)

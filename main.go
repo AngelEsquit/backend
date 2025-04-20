@@ -30,6 +30,7 @@ func main() {
 		r.Post("/register", handlers.PostRegisterHandler(db)) // Mover register aquí
 		r.Post("/login", handlers.PostLoginHandler(db))       // Mover login aquí
 	})
+	r.Post("/register", handlers.PostRegisterHandler(db))
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) { /* ... */ })
 
 	// --- Rutas Protegidas ---
